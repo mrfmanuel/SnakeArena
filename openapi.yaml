@@ -1,0 +1,397 @@
+openapi: 3.0.3
+info:
+  title: Snake Arena API
+  description: >
+    Backend contract for Snake Arena (see product-spec.md). Covers player
+    profiles, single-player scores, 2-player match results, and the
+    length-ranked leaderboard. This contract is derived from, and must
+    stay in sync with, the shapes already assumed by the frontend's mock
+    services layer (frontend/src/services/api.js).
+  version: 0.1.0
+servers:
+  - url: /api
+    description: Relative to wherever the backend is deployed; no live server yet.
+
+tags:
+  - name: profiles
+    description: Player profile creation, lookup, stats, and match history.
+  - name: scores
+    description: Single-player run results.
+  - name: matches
+    description: 2-player match results.
+  - name: leaderboard
+    description: Combined, length-ranked results across all players.
+
+paths:
+  /profiles:
+    post:
+      tags: [profiles]
+      operationId: upsertProfile
+      summary: Create or fetch a profile by name
+      description: >
+        Resolves the "type a name to create-or-select" flow in one call:
+        if a profile with this exact (case-sensitive) name already
+        exists, it is returned unchanged (200); otherwise a new profile
+        is created (201). Profile names are unique, so this is
+        effectively an idempotent upsert keyed on `name` rather than a
+        strict create — see the design note in the repo about this
+        endpoint's mismatch with typical REST create semantics.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProfileRequest'
+      responses:
+        '200':
+          description: An existing profile with this name was found and is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '201':
+          description: No profile with this name existed; a new one was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          description: Invalid name (empty, or exceeds the length limit).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: >
+            Edge case only: two concurrent requests tried to create the
+            same brand-new name at once and a uniqueness constraint
+            rejected the second write. Clients should treat this the
+            same as a 200 and retry with GET /profiles/{name}.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /profiles/{name}:
+    get:
+      tags: [profiles]
+      operationId: getProfile
+      summary: Fetch a profile's aggregate stats
+      description: >
+        Returns a profile's current stats (wins, draws, losses, best
+        snake length). Does not create the profile if it doesn't exist —
+        use POST /profiles for that.
+      parameters:
+        - $ref: '#/components/parameters/ProfileName'
+      responses:
+        '200':
+          description: The profile was found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '404':
+          description: No profile exists with this name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /profiles/{name}/history:
+    get:
+      tags: [profiles]
+      operationId: getProfileMatchHistory
+      summary: Fetch a profile's 2-player match history
+      description: >
+        Returns every 2-player match this profile took part in, newest
+        first. Does not include single-player runs (see GET /leaderboard
+        for a combined view). Returns an empty array if the profile
+        exists but has no match history yet.
+      parameters:
+        - $ref: '#/components/parameters/ProfileName'
+      responses:
+        '200':
+          description: Match history for this profile (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MatchHistoryEntry'
+        '404':
+          description: No profile exists with this name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /scores:
+    post:
+      tags: [scores]
+      operationId: submitSinglePlayerScore
+      summary: Submit the result of a completed single-player run
+      description: >
+        Records a single-player run's final snake length, updates the
+        profile's best-length stat if this run beat it, and makes the
+        run visible on the leaderboard. If no profile exists yet for
+        `profileName`, the backend creates one (mirrors the mock's
+        behavior) — see the design note about whether this auto-create
+        is actually desired for the real backend.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitScoreRequest'
+      responses:
+        '201':
+          description: Score recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreEntry'
+        '400':
+          description: Invalid body (missing profileName, or length not a non-negative integer).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /matches:
+    post:
+      tags: [matches]
+      operationId: submitMatchResult
+      summary: Submit the result of a completed 2-player match
+      description: >
+        Records a 2-player match outcome (win or draw), updates both
+        profiles' win/draw/loss counts and best-length stats, and makes
+        both results visible on the leaderboard. Exactly two distinct
+        players are required. `winnerName` must be one of the two
+        player names when `outcome` is "win", and must be omitted/null
+        when `outcome` is "draw" (matches the product rule that a
+        head-on or simultaneous double-death ends the match in a draw
+        for both). As with /scores, missing profiles are auto-created
+        to mirror current mock behavior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitMatchRequest'
+      responses:
+        '201':
+          description: Match result recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchEntry'
+        '400':
+          description: >
+            Invalid body — e.g. not exactly 2 players, duplicate player
+            names, a winnerName that isn't one of the two players, or a
+            winnerName present alongside outcome "draw".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /leaderboard:
+    get:
+      tags: [leaderboard]
+      operationId: getLeaderboard
+      summary: Fetch the combined leaderboard
+      description: >
+        Returns single-player runs and 2-player match results together,
+        one row per player per event, ranked by snake length descending.
+        Reflects only data on this backend instance (no cross-deployment
+        aggregation, per product-spec.md).
+      responses:
+        '200':
+          description: Leaderboard rows, ranked by length descending (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+
+components:
+  parameters:
+    ProfileName:
+      name: name
+      in: path
+      required: true
+      description: Exact, case-sensitive profile name.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 24
+
+  schemas:
+    ProfileStats:
+      type: object
+      description: Aggregate stats for a profile.
+      properties:
+        wins:
+          type: integer
+          minimum: 0
+        draws:
+          type: integer
+          minimum: 0
+        losses:
+          type: integer
+          minimum: 0
+        bestLength:
+          type: integer
+          minimum: 0
+          description: Snake length at death on this profile's best run or match.
+      required: [wins, draws, losses, bestLength]
+
+    Profile:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 24
+        stats:
+          $ref: '#/components/schemas/ProfileStats'
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, stats, createdAt]
+
+    CreateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 24
+      required: [name]
+
+    ScoreEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        profileName:
+          type: string
+        length:
+          type: integer
+          minimum: 0
+        date:
+          type: string
+          format: date-time
+      required: [id, profileName, length, date]
+
+    SubmitScoreRequest:
+      type: object
+      properties:
+        profileName:
+          type: string
+          minLength: 1
+          maxLength: 24
+        length:
+          type: integer
+          minimum: 0
+      required: [profileName, length]
+
+    MatchPlayerResult:
+      type: object
+      properties:
+        name:
+          type: string
+        length:
+          type: integer
+          minimum: 0
+          description: This player's snake length at death.
+      required: [name, length]
+
+    MatchEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchPlayerResult'
+          minItems: 2
+          maxItems: 2
+        outcome:
+          type: string
+          enum: [win, draw]
+        winnerName:
+          type: string
+          nullable: true
+          description: One of the two player names when outcome is "win"; null when outcome is "draw".
+        date:
+          type: string
+          format: date-time
+      required: [id, players, outcome, winnerName, date]
+
+    SubmitMatchRequest:
+      type: object
+      properties:
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchPlayerResult'
+          minItems: 2
+          maxItems: 2
+          description: Exactly two players, with distinct names.
+        outcome:
+          type: string
+          enum: [win, draw]
+        winnerName:
+          type: string
+          nullable: true
+          description: Required (and must match one of players[].name) when outcome is "win". Must be omitted or null when outcome is "draw".
+      required: [players, outcome]
+
+    MatchHistoryEntry:
+      type: object
+      properties:
+        opponent:
+          type: string
+          nullable: true
+        result:
+          type: string
+          enum: [win, loss, draw]
+        length:
+          type: integer
+          minimum: 0
+        date:
+          type: string
+          format: date-time
+      required: [opponent, result, length, date]
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [single, match]
+        profileName:
+          type: string
+        length:
+          type: integer
+          minimum: 0
+        date:
+          type: string
+          format: date-time
+        detail:
+          type: string
+          enum: ['Single-player', 'Win', 'Loss', 'Draw']
+          description: Human-readable label for this row.
+      required: [type, profileName, length, date, detail]
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
