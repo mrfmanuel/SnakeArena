@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snake Arena</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🐍 Snake Arena</h1>
+  </header>
+
+  <main class="app-main">
+
+    <!-- Start screen -->
+    <section id="screen-start" class="screen card">
+      <form id="start-form">
+        <fieldset class="mode-select">
+          <legend>Mode</legend>
+          <label><input type="radio" name="mode" value="single" checked /> Single player</label>
+          <label><input type="radio" name="mode" value="multi" /> 2 players (same screen)</label>
+        </fieldset>
+
+        <div class="field">
+          <label for="p1-name">Player 1 name</label>
+          <input type="text" id="p1-name" maxlength="24" placeholder="e.g. Alex" required />
+          <p class="hint">Controls: WASD</p>
+        </div>
+
+        <div class="field" id="player2-field" hidden>
+          <label for="p2-name">Player 2 name</label>
+          <input type="text" id="p2-name" maxlength="24" placeholder="e.g. Sam" />
+          <p class="hint">Controls: Arrow keys</p>
+        </div>
+
+        <p id="start-error" class="error" role="alert"></p>
+
+        <button type="submit" class="btn btn-primary">Start</button>
+      </form>
+
+      <div class="start-links">
+        <button type="button" id="open-leaderboard-btn" class="btn btn-secondary">Leaderboard</button>
+      </div>
+
+      <div class="profile-lookup">
+        <label for="profile-name">View a profile</label>
+        <div class="profile-lookup-row">
+          <input type="text" id="profile-name" maxlength="24" placeholder="Player name" />
+          <button type="button" id="view-profile-btn" class="btn btn-secondary">View</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Game screen -->
+    <section id="screen-game" class="screen" hidden>
+      <div id="hud" class="hud"></div>
+      <p class="hint">Space to pause/resume</p>
+      <div class="canvas-wrap">
+        <canvas id="game-canvas" width="400" height="400"></canvas>
+        <div id="pause-overlay" class="pause-overlay" hidden>Paused</div>
+      </div>
+    </section>
+
+    <!-- Game-over screen -->
+    <section id="screen-gameover" class="screen card" hidden>
+      <h2 id="gameover-title">Game Over</h2>
+      <p id="gameover-detail"></p>
+      <div class="button-row">
+        <button type="button" id="play-again-btn" class="btn btn-primary">Play Again</button>
+        <button type="button" id="gameover-leaderboard-btn" class="btn btn-secondary">Leaderboard</button>
+      </div>
+    </section>
+
+    <!-- Leaderboard screen -->
+    <section id="screen-leaderboard" class="screen card" hidden>
+      <h2>Leaderboard</h2>
+      <table class="data-table">
+        <thead>
+          <tr><th>#</th><th>Player</th><th>Length</th><th>Result</th></tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+      <button type="button" id="leaderboard-back-btn" class="btn btn-secondary">Back</button>
+    </section>
+
+    <!-- Profile screen -->
+    <section id="screen-profile" class="screen card" hidden>
+      <div id="profile-body"></div>
+      <button type="button" id="profile-back-btn" class="btn btn-secondary">Back</button>
+    </section>
+
+  </main>
+
+  <script src="src/services/api.js"></script>
+  <script src="src/game/engine.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
