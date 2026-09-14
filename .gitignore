@@ -5,6 +5,10 @@ __pycache__/
 .venv/
 *.egg-info/
 
+# SQLite (local dev database — see backend/README.md)
+*.db
+*.db-journal
+
 # OS
 .DS_Store
 Thumbs.db

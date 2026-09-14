@@ -2,8 +2,9 @@
 Snake Arena backend — FastAPI app.
 
 Implements exactly the contract in /openapi.yaml, mounted under /api to
-match that file's `servers` entry. In-memory store only (app/store.py) —
-no database yet.
+match that file's `servers` entry. Persists to SQLite via SQLAlchemy
+(app/store.py, app/db.py) — see backend/README.md for the database URL
+env var and how to reset local data.
 
 Run locally:  uvicorn app.main:app --reload   (from backend/, venv active)
 """
@@ -19,7 +20,7 @@ from app.routers import api_router
 app = FastAPI(
     title="Snake Arena API",
     version="0.1.0",
-    description="In-memory implementation of the contract in openapi.yaml.",
+    description="SQLite-backed implementation of the contract in openapi.yaml.",
 )
 
 # The frontend is static HTML/JS with no build step — it's typically
