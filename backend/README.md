@@ -110,4 +110,7 @@ real data or each other.
   `/api`, and translates FastAPI's default error shapes
   (`{"detail": ...}` / 422) into the contract's `{"message": ...}` / 400
   shape.
-- `tests/` — pytest + FastAPI's `TestClient`, one file per resource.
+- `tests/` — pytest + FastAPI's `TestClient`, one file per resource,
+  plus `test_store.py` for persistence-layer specifics (e.g. the
+  database-level unique constraint on profile names) that aren't tied
+  to any one endpoint.
