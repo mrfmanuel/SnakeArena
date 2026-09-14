@@ -34,3 +34,33 @@ def test_submit_score_rejects_negative_length(client):
 def test_submit_score_rejects_missing_profile_name(client):
     resp = client.post("/api/scores", json={"length": 5})
     assert resp.status_code == 400
+
+
+def test_best_length_is_retained_across_a_later_lower_match_result(client):
+    """bestLength is the max across BOTH scores and matches for a profile —
+    a lower length from a later match must not overwrite a higher score."""
+    client.post("/api/scores", json={"profileName": "Alice", "length": 9})
+    client.post(
+        "/api/matches",
+        json={
+            "players": [{"name": "Alice", "length": 4}, {"name": "Bob", "length": 2}],
+            "outcome": "win",
+            "winnerName": "Alice",
+        },
+    )
+
+    assert client.get("/api/profiles/Alice").json()["stats"]["bestLength"] == 9
+
+
+def test_best_length_is_updated_by_a_later_higher_match_result(client):
+    client.post("/api/scores", json={"profileName": "Alice", "length": 4})
+    client.post(
+        "/api/matches",
+        json={
+            "players": [{"name": "Alice", "length": 12}, {"name": "Bob", "length": 2}],
+            "outcome": "win",
+            "winnerName": "Alice",
+        },
+    )
+
+    assert client.get("/api/profiles/Alice").json()["stats"]["bestLength"] == 12

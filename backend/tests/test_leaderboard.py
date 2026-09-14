@@ -46,3 +46,29 @@ def test_leaderboard_includes_both_single_and_match_rows(client):
 
     draw_rows = [row for row in rows if row["type"] == "match"]
     assert all(row["detail"] == "Draw" for row in draw_rows)
+
+
+def test_leaderboard_exact_order_for_mixed_lengths(client):
+    client.post("/api/scores", json={"profileName": "A", "length": 3})
+    client.post("/api/scores", json={"profileName": "B", "length": 15})
+    client.post("/api/scores", json={"profileName": "C", "length": 7})
+    client.post(
+        "/api/matches",
+        json={"players": [{"name": "D", "length": 1}, {"name": "E", "length": 20}], "outcome": "win", "winnerName": "E"},
+    )
+
+    rows = client.get("/api/leaderboard").json()
+
+    assert [row["profileName"] for row in rows] == ["E", "B", "C", "A", "D"]
+    assert [row["length"] for row in rows] == [20, 15, 7, 3, 1]
+
+
+def test_leaderboard_keeps_both_entries_on_a_length_tie(client):
+    client.post("/api/scores", json={"profileName": "A", "length": 10})
+    client.post("/api/scores", json={"profileName": "B", "length": 10})
+
+    rows = client.get("/api/leaderboard").json()
+
+    assert len(rows) == 2
+    assert {row["profileName"] for row in rows} == {"A", "B"}
+    assert all(row["length"] == 10 for row in rows)
