@@ -10,6 +10,7 @@ Run locally:  uvicorn app.main:app --reload   (from backend/, venv active)
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -19,6 +20,18 @@ app = FastAPI(
     title="Snake Arena API",
     version="0.1.0",
     description="In-memory implementation of the contract in openapi.yaml.",
+)
+
+# The frontend is static HTML/JS with no build step — it's typically
+# opened straight from disk (origin "null") or served from an arbitrary
+# static-file port, not from this API's own origin. Wide open and
+# credential-less is fine for local dev; tighten this (specific origins,
+# no "*") before any real deployment.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(api_router, prefix="/api")

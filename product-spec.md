@@ -60,9 +60,14 @@ A ranked view of top results, backed by the server, combining single-player scor
 
 ## Game Flow
 1. **Start screen** — enter player name(s) (1 for single-player, 2 for match) and select mode.
-2. **Game screen** — play; Spacebar pauses/resumes.
-3. **Game-over screen** — shows result (score, or winner/draw); result is submitted to backend.
-4. **Restart** — button returns to start screen.
+2. **Countdown** — a 3-2-1 overlay shows on the game screen immediately before play actually begins: after clicking Start, after clicking Play Again, and after resuming from pause. Snakes don't move and direction key presses don't register until it finishes.
+3. **Game screen** — play; Spacebar pauses (resuming goes through the countdown above, not straight back into play).
+4. **Game-over screen** — shows result (score, or winner/draw); result is submitted to backend. "Play Again" immediately starts a new match with the same player name(s)/mode, through the countdown; "Change players" returns to the start screen instead.
+
+**Acceptance criteria (countdown):**
+- [ ] A 3-2-1 countdown overlay appears on the game screen after Start, after Play Again, and after resuming from pause — in every case, before movement resumes.
+- [ ] While the countdown is showing, no snake moves and no direction key press changes a snake's direction.
+- [ ] Movement and directional input become active only once the countdown finishes.
 
 ## Non-Goals
 - No login/passwords or authentication — profiles are name-only, not secured.

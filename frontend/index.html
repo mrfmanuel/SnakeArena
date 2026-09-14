@@ -59,6 +59,7 @@
       <div class="canvas-wrap">
         <canvas id="game-canvas" width="400" height="400"></canvas>
         <div id="pause-overlay" class="pause-overlay" hidden>Paused</div>
+        <div id="countdown-overlay" class="pause-overlay countdown-overlay" hidden></div>
       </div>
     </section>
 
@@ -66,10 +67,12 @@
     <section id="screen-gameover" class="screen card" hidden>
       <h2 id="gameover-title">Game Over</h2>
       <p id="gameover-detail"></p>
+      <p id="gameover-warning" class="error" role="alert" hidden></p>
       <div class="button-row">
         <button type="button" id="play-again-btn" class="btn btn-primary">Play Again</button>
         <button type="button" id="gameover-leaderboard-btn" class="btn btn-secondary">Leaderboard</button>
       </div>
+      <button type="button" id="change-players-btn" class="link-btn">Change players</button>
     </section>
 
     <!-- Leaderboard screen -->
@@ -92,6 +95,8 @@
 
   </main>
 
+  <script src="src/services/api.mock.js"></script>
+  <script src="src/services/api.real.js"></script>
   <script src="src/services/api.js"></script>
   <script src="src/game/engine.js"></script>
   <script src="src/app.js"></script>

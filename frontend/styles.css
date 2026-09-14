@@ -189,6 +189,22 @@ input[type="text"] {
   gap: 0.75rem;
 }
 
+.countdown-overlay {
+  font-size: 3.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;

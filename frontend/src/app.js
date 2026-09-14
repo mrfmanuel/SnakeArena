@@ -44,10 +44,13 @@
   const ctx = canvas.getContext('2d');
   const hud = document.getElementById('hud');
   const pauseOverlay = document.getElementById('pause-overlay');
+  const countdownOverlay = document.getElementById('countdown-overlay');
 
   const gameoverTitle = document.getElementById('gameover-title');
   const gameoverDetail = document.getElementById('gameover-detail');
+  const gameoverWarning = document.getElementById('gameover-warning');
   const playAgainBtn = document.getElementById('play-again-btn');
+  const changePlayersBtn = document.getElementById('change-players-btn');
   const gameoverLeaderboardBtn = document.getElementById('gameover-leaderboard-btn');
 
   const leaderboardBody = document.getElementById('leaderboard-body');
@@ -71,7 +74,46 @@
 
   let game = null;
   let loopHandle = null;
-  let lastNames = { single: '', p1: '', p2: '' };
+  let lastGameConfig = null; // { mode, names } — set on launch, reused by "Play Again"
+
+  const COUNTDOWN_START = 3;
+  const COUNTDOWN_STEP_MS = 800;
+
+  /**
+   * Shows the 3-2-1 overlay, then calls `onComplete`. The engine already
+   * ignores ticks and direction input while game.status is 'countdown'
+   * (see engine.js), so this only needs to own the overlay/timer and
+   * flip the status back once it's done.
+   */
+  function runCountdown(onComplete) {
+    let count = COUNTDOWN_START;
+    countdownOverlay.textContent = String(count);
+    countdownOverlay.hidden = false;
+    const timer = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        countdownOverlay.textContent = String(count);
+      } else {
+        clearInterval(timer);
+        countdownOverlay.hidden = true;
+        onComplete();
+      }
+    }, COUNTDOWN_STEP_MS);
+  }
+
+  /** Creates a game for (mode, names), shows the game screen, and runs the countdown before play begins. */
+  function launchGame(mode, names) {
+    lastGameConfig = { mode, names };
+    game = new SnakeGame(mode, names);
+    game.status = 'countdown';
+    render();
+    pauseOverlay.hidden = true;
+    showScreen('game');
+    startLoop();
+    runCountdown(() => {
+      game.status = 'playing';
+    });
+  }
 
   const KEY_MAP = {
     // Player 1: WASD. Also usable in single-player.
@@ -92,8 +134,19 @@
 
     if (e.code === 'Space') {
       e.preventDefault();
-      game.togglePause();
-      pauseOverlay.hidden = game.status !== 'paused';
+      if (game.status === 'playing') {
+        game.togglePause();
+        pauseOverlay.hidden = false;
+      } else if (game.status === 'paused') {
+        // Resuming goes through the same countdown as a fresh start,
+        // rather than dropping straight back into 'playing'.
+        pauseOverlay.hidden = true;
+        game.status = 'countdown';
+        runCountdown(() => {
+          game.status = 'playing';
+        });
+      }
+      // 'countdown' (already running) and 'over' ignore Space.
       return;
     }
 
@@ -161,6 +214,12 @@
     return div.innerHTML;
   }
 
+  /** Turn a services-layer rejection into text worth showing a player. */
+  function describeError(err, fallback) {
+    if (err && typeof err.message === 'string' && err.message) return err.message;
+    return fallback;
+  }
+
   // ---- Game loop ------------------------------------------------------
 
   function startLoop() {
@@ -184,24 +243,34 @@
 
   async function handleGameOver() {
     const result = game.result;
+
+    // Fill in the result text first, unconditionally — a save failure
+    // shouldn't hide the result the players just watched happen.
     if (result.type === 'single') {
-      await API.submitSinglePlayerScore({ profileName: result.profileName, length: result.length });
       gameoverTitle.textContent = 'Game Over';
       gameoverDetail.textContent = `${result.profileName} reached a length of ${result.length}.`;
     } else {
-      await API.submitMatchResult({
-        players: result.players,
-        outcome: result.outcome,
-        winnerName: result.winnerName,
-      });
       const lengthsText = result.players.map((p) => `${p.name}: ${p.length}`).join(' · ');
-      if (result.outcome === 'draw') {
-        gameoverTitle.textContent = "It's a draw!";
-      } else {
-        gameoverTitle.textContent = `${result.winnerName} wins!`;
-      }
+      gameoverTitle.textContent = result.outcome === 'draw' ? "It's a draw!" : `${result.winnerName} wins!`;
       gameoverDetail.textContent = lengthsText;
     }
+
+    try {
+      if (result.type === 'single') {
+        await API.submitSinglePlayerScore({ profileName: result.profileName, length: result.length });
+      } else {
+        await API.submitMatchResult({
+          players: result.players,
+          outcome: result.outcome,
+          winnerName: result.winnerName,
+        });
+      }
+      gameoverWarning.hidden = true;
+    } catch (err) {
+      gameoverWarning.textContent = describeError(err, "Couldn't save this result to the server.");
+      gameoverWarning.hidden = false;
+    }
+
     showScreen('gameover');
   }
 
@@ -242,21 +311,29 @@
     }
 
     const names = mode === 'single' ? [p1Name] : [p1Name, p2Name];
-    await Promise.all(names.map((n) => API.getOrCreateProfile(n)));
+    const submitBtn = startForm.querySelector('button[type=submit]');
+    submitBtn.disabled = true;
+    try {
+      await Promise.all(names.map((n) => API.getOrCreateProfile(n)));
+    } catch (err) {
+      startError.textContent = describeError(err, 'Could not start the game.');
+      return;
+    } finally {
+      submitBtn.disabled = false;
+    }
 
-    lastNames = { single: mode === 'single' ? p1Name : '', p1: p1Name, p2: p2Name };
-    game = new SnakeGame(mode, names);
-    render();
-    pauseOverlay.hidden = true;
-    showScreen('game');
-    startLoop();
+    launchGame(mode, names);
   });
 
   // ---- Game-over screen -------------------------------------------------
 
   playAgainBtn.addEventListener('click', () => {
-    showScreen('start');
+    // Reuses the same player name(s)/mode and goes straight back into a
+    // new match (through the countdown) — no need to re-type names.
+    launchGame(lastGameConfig.mode, lastGameConfig.names);
   });
+
+  changePlayersBtn.addEventListener('click', () => showScreen('start'));
 
   gameoverLeaderboardBtn.addEventListener('click', openLeaderboard);
 
@@ -265,7 +342,15 @@
   async function openLeaderboard() {
     leaderboardBody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
     showScreen('leaderboard');
-    const entries = await API.getLeaderboard();
+
+    let entries;
+    try {
+      entries = await API.getLeaderboard();
+    } catch (err) {
+      leaderboardBody.innerHTML = `<tr><td colspan="4">${escapeHtml(describeError(err, 'Could not load the leaderboard.'))}</td></tr>`;
+      return;
+    }
+
     if (entries.length === 0) {
       leaderboardBody.innerHTML = '<tr><td colspan="4">No results yet — play a round!</td></tr>';
       return;
@@ -293,7 +378,14 @@
     profileBody.innerHTML = '<p>Loading…</p>';
     showScreen('profile');
 
-    const [stats, history] = await Promise.all([API.getProfileStats(name), API.getProfileHistory(name)]);
+    let stats;
+    let history;
+    try {
+      [stats, history] = await Promise.all([API.getProfileStats(name), API.getProfileHistory(name)]);
+    } catch (err) {
+      profileBody.innerHTML = `<p>${escapeHtml(describeError(err, 'Could not load this profile.'))}</p>`;
+      return;
+    }
 
     if (!stats) {
       profileBody.innerHTML = `<p>No profile named "${escapeHtml(name)}" yet — play a round to create one.</p>`;

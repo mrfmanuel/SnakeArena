@@ -44,7 +44,10 @@
     constructor(mode, playerNames) {
       this.mode = mode;
       this.gridSize = GRID_SIZE;
-      this.status = 'playing'; // 'playing' | 'paused' | 'over'
+      this.status = 'playing'; // 'playing' | 'paused' | 'countdown' | 'over'
+      // 'countdown' is set/cleared by app.js around its 3-2-1 overlay; the
+      // engine just needs to not move snakes or accept input while it's up
+      // — tick() below already no-ops for any status other than 'playing'.
       this.result = null;
       this.snakes = this.initSnakes(mode, playerNames);
       this.food = this.spawnFood();
@@ -77,8 +80,13 @@
       };
     }
 
-    /** Queue a direction change for a snake; ignored if it reverses the snake into itself. */
+    /**
+     * Queue a direction change for a snake; ignored if it reverses the
+     * snake into itself, or if the pre-game/pre-resume countdown is
+     * still showing (movement only starts once it finishes).
+     */
     setDirection(snakeId, dir) {
+      if (this.status === 'countdown') return;
       const snake = this.snakes.find((s) => s.id === snakeId && s.alive);
       if (!snake) return;
       if (isOpposite(dir, snake.direction)) return;
